@@ -1,0 +1,36 @@
+# Environment variables - NEVER commit real secrets
+.env*
+!.env.example
+
+# Old repo backup (never commit)
+.git.old-codeboybebop1-backup/
+.git.old-codeboybebop1/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite cache
+.vite/
+
+# Local Netlify folder
+.netlify

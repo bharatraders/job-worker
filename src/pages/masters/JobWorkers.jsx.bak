@@ -1,0 +1,308 @@
+﻿import { useState } from 'react'
+import { useApiCall, useMutation } from '../../hooks/useApiCall'
+import { fetchJobWorkers, upsertJobWorker, deleteJobWorker } from '../../features/masters/jobWorkersApi'
+import { fetchItemTypes } from '../../features/masters/api'
+import { showToast } from '../../components/ui/Toast'
+import { useConfirm } from '../../components/ui/ConfirmModal'
+import { FiPlus, FiTrash2, FiChevronDown, FiChevronRight, FiDownload, FiEdit2, FiCheck, FiX } from 'react-icons/fi'
+import { exportJobWorkersCSV } from '../../lib/export'
+
+const F = 'w-full px-3 py-2 border border-border-strong rounded-md text-sm'
+
+export default function JobWorkers() {
+  const { data: workers, loading, error, refetch } = useApiCall(fetchJobWorkers)
+  const { data: itemTypes } = useApiCall(fetchItemTypes)
+  const { mutate: save, loading: saving } = useMutation(upsertJobWorker)
+  const { mutate: remove } = useMutation(deleteJobWorker)
+  const [expanded, setExpanded] = useState({})
+  const [editing, setEditing] = useState(null)
+  const { confirm } = useConfirm()
+
+  function handleExportWorkers() {
+    if (!workers?.length) return showToast('No workers to export')
+    exportJobWorkersCSV(workers)
+    showToast('Workers exported to CSV')
+  }
+
+  function toggle(id) { setExpanded({ ...expanded, [id]: !expanded[id] }) }
+
+  function startNew() {
+    setEditing({ id: null, name: '', phone: '', groups: [] })
+  }
+
+  function startEdit(jw) {
+    setEditing({
+      id: jw.id,
+      name: jw.name,
+      phone: jw.phone || '',
+      groups: (jw.groups || []).map((g) => ({
+        id: g.id,
+        itemTypeId: g.item_type_id,
+        groupName: g.group_name,
+        pieceRate: g.piece_rate,
+        sizes: (g.group_sizes || []).map((s) => ({ id: s.id, name: s.name })),
+        parts: (g.group_parts || []).map((p) => ({
+          id: p.id,
+          partName: p.part_name,
+          bom: Object.fromEntries((p.group_part_bom || []).map((b) => [b.size_id, b.cm_per_piece])),
+        })),
+      })),
+    })
+  }
+
+  function addGroup() {
+    setEditing({ ...editing, groups: [...editing.groups, { id: null, itemTypeId: '', groupName: '', pieceRate: '', sizes: [], parts: [] }] })
+  }
+
+  function removeGroup(gi) {
+    const g = [...editing.groups]
+    g.splice(gi, 1)
+    setEditing({ ...editing, groups: g })
+  }
+
+  function addSize(gi) {
+    const g = [...editing.groups]
+    g[gi].sizes.push({ id: null, name: '' })
+    setEditing({ ...editing, groups: g })
+  }
+
+  function removeSize(gi, si) {
+    const g = [...editing.groups]
+    g[gi].sizes.splice(si, 1)
+    setEditing({ ...editing, groups: g })
+  }
+
+  function addPart(gi) {
+    const g = [...editing.groups]
+    g[gi].parts.push({ id: null, partName: '', bom: {} })
+    setEditing({ ...editing, groups: g })
+  }
+
+  function removePart(gi, pi) {
+    const g = [...editing.groups]
+    g[gi].parts.splice(pi, 1)
+    setEditing({ ...editing, groups: g })
+  }
+
+  function updateGroup(gi, data) {
+    const g = [...editing.groups]
+    g[gi] = { ...g[gi], ...data }
+    setEditing({ ...editing, groups: g })
+  }
+
+  function updateSize(gi, si, data) {
+    const g = [...editing.groups]
+    g[gi].sizes[si] = { ...g[gi].sizes[si], ...data }
+    setEditing({ ...editing, groups: g })
+  }
+
+  function updatePart(gi, pi, data) {
+    const g = [...editing.groups]
+    g[gi].parts[pi] = { ...g[gi].parts[pi], ...data }
+    setEditing({ ...editing, groups: g })
+  }
+  async function handleSave() {
+    if (!editing.name.trim()) return showToast('Enter name')
+    try {
+      await save({ id: editing.id, name: editing.name, phone: editing.phone, groups: editing.groups })
+      showToast(editing.id ? 'Updated' : 'Created')
+      setEditing(null)
+      refetch()
+    } catch (err) {
+      showToast('Failed: ' + err.message)
+    }
+  }
+
+  async function handleDelete(id, name) {
+    const ok = await confirm({
+      title: 'Delete Job Worker',
+      message: `Delete "${name}"? This will also delete all their groups. This action cannot be undone.`,
+      type: 'danger',
+      confirmText: 'Delete',
+    })
+    if (!ok) return
+    try { await remove(id); showToast('Deleted'); refetch() } catch (err) { showToast('Failed: ' + err.message) }
+  }
+
+  if (loading) return <div className="text-text-soft p-8">Loading...</div>
+  if (error) return <div className="text-red p-8">Error: {error}</div>
+
+  return (
+    <div>
+      {/* Edit/Add Form */}
+      {editing && (
+        <div className="bg-panel border border-border rounded-lg p-4 mb-4">
+          <h2 className="text-base font-bold mb-3">{editing.id ? 'Edit' : 'Add'} Job Worker</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Name</label>
+              <input className={F} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="Job worker name" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Phone (optional)</label>
+              <input className={F} value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} placeholder="10-digit number" />
+            </div>
+          </div>
+
+          {/* Groups */}
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold">Groups</h3>
+              <button className="btn btn-sm flex items-center gap-1" onClick={addGroup}><FiPlus size={14} /> Add Group</button>
+            </div>
+            {editing.groups.map((group, gi) => (
+              <div key={gi} className="section-block">
+                <button className="absolute top-2 right-2 text-text-faint hover:text-red" onClick={() => removeGroup(gi)}><FiTrash2 size={14} /></button>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Item Type</label>
+                    <select className={F} value={group.itemTypeId} onChange={(e) => updateGroup(gi, { itemTypeId: e.target.value })}>
+                      <option value="">Select item type...</option>
+                      {itemTypes?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Group Name</label>
+                    <input className={F} value={group.groupName} onChange={(e) => updateGroup(gi, { groupName: e.target.value })} placeholder="Group name" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Piece Rate (₹)</label>
+                    <input type="number" step="0.01" className={F} value={group.pieceRate} onChange={(e) => updateGroup(gi, { pieceRate: e.target.value })} placeholder="Rate per piece" />
+                  </div>
+                </div>
+
+                {/* Sizes */}
+                <div className="mb-3">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-text-soft uppercase">Sizes</label>
+                    <button className="text-xs text-accent hover:underline" onClick={() => addSize(gi)}>+ Add size</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {group.sizes.map((sz, si) => (
+                      <div key={si} className="flex gap-1 items-center bg-[#f7f8fa] border border-border rounded px-2 py-1">
+                        <input className="w-20 px-1 py-0.5 border border-border rounded text-sm bg-white" value={sz.name} onChange={(e) => updateSize(gi, si, { name: e.target.value })} placeholder="Size" />
+                        <button className="text-text-faint hover:text-red text-xs" onClick={() => removeSize(gi, si)}><FiX size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Parts & BOM */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-text-soft uppercase">Parts & BOM</label>
+                    <button className="text-xs text-accent hover:underline" onClick={() => addPart(gi)}>+ Add Part</button>
+                  </div>
+                  {group.parts.map((part, pi) => (
+                    <div key={pi} className="mb-2 p-2 border border-border rounded bg-[#fafbfc]">
+                      <div className="flex gap-2 items-center mb-2">
+                        <input className="flex-1 px-2 py-1 border border-border-strong rounded text-sm" value={part.partName} onChange={(e) => updatePart(gi, pi, { partName: e.target.value })} placeholder="Part name" />
+                        <button className="text-text-faint hover:text-red text-xs" onClick={() => removePart(gi, pi)}><FiX size={14} /></button>
+                      </div>
+                      {group.sizes.length > 0 && (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1">
+                          {group.sizes.map((sz) => (
+                            <div key={sz.id || sz.name}>
+                              <div className="text-[10px] text-text-soft text-center font-bold">{sz.name}</div>
+                              <input type="number" step="0.1" className="w-full px-1 py-1 border border-border-strong rounded text-xs text-center" value={part.bom[sz.id] || part.bom[sz.name] || ''} onChange={(e) => { const bom = { ...part.bom }; bom[sz.id || sz.name] = e.target.value; updatePart(gi, pi, { bom }) }} placeholder="cm" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <button className="btn btn-primary flex items-center gap-1.5" onClick={handleSave} disabled={saving}><FiCheck size={14} /> {saving ? 'Saving...' : 'Save'}</button>
+            <button className="btn flex items-center gap-1.5" onClick={() => setEditing(null)}><FiX size={14} /> Cancel</button>
+          </div>
+        </div>
+      )}
+      {/* Worker List */}
+      <div className="bg-panel border border-border rounded-lg p-4">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-base font-bold">Job Workers ({workers?.length || 0})</h2>
+          <div className="flex gap-2">
+            {!editing && <button className="btn btn-primary flex items-center gap-1.5" onClick={startNew}><FiPlus size={14} /> Add Job Worker</button>}
+            <button className="btn flex items-center gap-1.5" onClick={handleExportWorkers}><FiDownload size={14} /> Export Excel</button>
+          </div>
+        </div>
+        {!workers?.length ? (
+          <div className="empty-state"><div className="msg">No job workers yet.</div></div>
+        ) : (
+          <div className="space-y-2">
+            {workers.map((jw) => (
+              <div key={jw.id} className="border border-border rounded-lg">
+                <div className="flex justify-between items-center p-3 cursor-pointer" onClick={() => toggle(jw.id)}>
+                  <div className="flex items-center gap-2">
+                    {expanded[jw.id] ? <FiChevronDown size={16} /> : <FiChevronRight size={16} />}
+                    <b>{jw.name}</b>
+                    {jw.phone && <span className="text-xs text-text-soft">· {jw.phone}</span>}
+                    <span className="text-xs text-text-soft">({jw.groups?.length || 0} groups)</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <button className="btn btn-sm flex items-center gap-1" onClick={(e) => { e.stopPropagation(); startEdit(jw) }}><FiEdit2 size={12} /> Edit</button>
+                    <button className="btn btn-sm flex items-center gap-1 text-red hover:bg-red-50" onClick={(e) => { e.stopPropagation(); handleDelete(jw.id, jw.name) }}><FiTrash2 size={12} /> Delete</button>
+                  </div>
+                </div>
+                {expanded[jw.id] && (
+                  <div className="px-3 pb-3 border-t border-border pt-2">
+                    {jw.groups?.length === 0 ? (
+                      <div className="text-sm text-text-soft">No groups added yet.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {jw.groups?.map((g) => {
+                          const it = itemTypes?.find((t) => t.id === g.item_type_id)
+                          return (
+                            <div key={g.id} className="p-2 border border-border rounded bg-[#fafbfc]">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <b>{g.group_name}</b>
+                                  {it && <span className="text-xs text-text-soft ml-2">({it.name})</span>}
+                                  <span className="text-xs text-text-soft ml-2">₹{g.piece_rate}/pc</span>
+                                </div>
+                              </div>
+                              {g.group_sizes?.length > 0 && (
+                                <div className="mb-2">
+                                  <div className="text-[10px] font-bold text-text-soft uppercase mb-1">Sizes</div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {g.group_sizes.map((s) => (
+                                      <span key={s.id} className="px-2 py-0.5 bg-white border border-border rounded text-xs">{s.name}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {g.group_parts?.length > 0 && (
+                                <div>
+                                  <div className="text-[10px] font-bold text-text-soft uppercase mb-1">Parts & BOM</div>
+                                  {g.group_parts.map((p) => (
+                                    <div key={p.id} className="mb-1 text-xs">
+                                      <b>{p.part_name}</b>
+                                      {p.group_part_bom?.length > 0 && (
+                                        <span className="text-text-soft"> · {p.group_part_bom.map((b) => `${b.size_name || b.size_id}: ${b.cm_per_piece}cm`).join(', ')}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
