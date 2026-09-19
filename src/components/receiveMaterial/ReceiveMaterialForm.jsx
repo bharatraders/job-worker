@@ -5,7 +5,7 @@ import ItemRow from './ItemRow'
 
 const F = 'w-full px-3 py-2 border border-border-strong rounded-md text-sm'
 
-export default function ReceiveMaterialForm({ form, setForm, jobWorkers, itemTypes, parties, fabrics, onSave, onCancel, onSelectJobWorker, onAddNewJobWorker, onSelectItemType, onItemTypeText, onAddNewItemType, saving }) {
+export default function ReceiveMaterialForm({ form, setForm, jobWorkers, itemTypes, parties, fabrics, onSave, onCancel, onSelectJobWorker, onAddNewJobWorker, onSelectItemType, onItemTypeText, onAddNewItemType, onSelectParty, onPartyText, onAddNewParty, onSelectGroup, onGroupText, onAddNewGroup, onSelectPartFabric, onPartFabricText, onAddNewPartFabric, saving }) {
   // jobWorkers may still be null on first render (History → Edit navigates
   // before useApiCall resolves). Guard so .find on null never throws.
   const workers = Array.isArray(jobWorkers) ? jobWorkers : []
@@ -52,7 +52,7 @@ export default function ReceiveMaterialForm({ form, setForm, jobWorkers, itemTyp
           </button>
         </div>
         {form.items.map((item, iIdx) => (
-          <ItemRow key={iIdx} item={item} iIdx={iIdx} form={form} setForm={setForm} itemTypes={itemTypes} parties={parties} fabrics={fabrics} getGroups={getGroups} getSizes={getSizes} getParts={getParts} rmItem={rmItem} onSelectItemType={onSelectItemType} onItemTypeText={onItemTypeText} onAddNewItemType={onAddNewItemType} />
+          <ItemRow key={iIdx} item={item} iIdx={iIdx} form={form} setForm={setForm} itemTypes={itemTypes} parties={parties} fabrics={fabrics} getGroups={getGroups} getSizes={getSizes} getParts={getParts} rmItem={rmItem} onSelectItemType={onSelectItemType} onItemTypeText={onItemTypeText} onAddNewItemType={onAddNewItemType} onSelectParty={onSelectParty} onPartyText={onPartyText} onAddNewParty={onAddNewParty} onSelectGroup={onSelectGroup} onGroupText={onGroupText} onAddNewGroup={onAddNewGroup} onSelectPartFabric={onSelectPartFabric} onPartFabricText={onPartFabricText} onAddNewPartFabric={onAddNewPartFabric} />
         ))}
         {/* Add Block button below item blocks with grand total — mirrors Issue Fabric -> New Entry */}
         <div className="flex items-center justify-between mt-3">

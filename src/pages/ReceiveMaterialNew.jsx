@@ -1,15 +1,17 @@
-﻿import { useState, useEffect } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApiCall, useMutation } from '../hooks/useApiCall'
 import { fetchReceiveMaterial, upsertReceiveMaterial, deleteReceiveMaterial } from '../features/receiveMaterial/api'
 import { fetchJobWorkers, upsertJobWorker } from '../features/masters/jobWorkersApi'
-import { fetchItemTypes, upsertItemType, fetchParties, fetchFabrics } from '../features/masters/api'
+import { fetchItemTypes, upsertItemType, fetchParties, upsertParty, fetchFabrics, upsertFabric } from '../features/masters/api'
 import { showToast } from '../components/ui/Toast'
 import { todayStr } from '../lib/format'
 import { FiArrowLeft, FiTrash2 } from 'react-icons/fi'
 import ReceiveMaterialForm from '../components/receiveMaterial/ReceiveMaterialForm'
 
 const DRAFT_KEY = 'jwt_draft_receiveMaterial'
+
+const PARTY_TYPES = ['School', 'Retailer', 'Common Stock']
 
 function saveDraft(state) {
   if (!state || state.id) return
@@ -41,12 +43,17 @@ export default function ReceiveMaterialNew() {
   const { data: entries, refetch } = useApiCall(fetchReceiveMaterial, [], 'receiveMaterial')
   const { data: jobWorkers, refetch: refetchJobWorkers } = useApiCall(fetchJobWorkers, [], 'jobWorkers')
   const { data: itemTypes, refetch: refetchItemTypes } = useApiCall(fetchItemTypes, [], 'itemTypes')
-  const { data: parties } = useApiCall(fetchParties, [], 'parties')
-  const { data: fabrics } = useApiCall(fetchFabrics, [], 'fabrics')
+  const { data: parties, refetch: refetchParties } = useApiCall(fetchParties, [], 'parties')
+  const { data: fabrics, refetch: refetchFabrics } = useApiCall(fetchFabrics, [], 'fabrics')
   const { mutate: save, loading: saving } = useMutation(upsertReceiveMaterial)
   const { mutate: remove } = useMutation(deleteReceiveMaterial)
   const [form, setForm] = useState(null)
   const [showDraftBanner, setShowDraftBanner] = useState(false)
+  // Pending "+ Add party" request: { iIdx, name } — shown in a small modal
+  // so the user can pick the required party type before we insert.
+  const [partyModal, setPartyModal] = useState(null)
+  const [partyType, setPartyType] = useState(PARTY_TYPES[0])
+  const partyResolveRef = useRef(null)
 
   useEffect(() => {
     const editEntry = location.state?.editEntry
@@ -96,8 +103,10 @@ export default function ReceiveMaterialNew() {
     try {
       const created = await upsertJobWorker({ name, phone: '', groups: [] })
       showToast('Job worker added')
-      await refetchJobWorkers()
-      return created?.id || null
+      const fresh = await refetchJobWorkers()
+      const list = Array.isArray(fresh) ? fresh : jobWorkers || []
+      const found = list.find((j) => String(j?.name || '').toLowerCase() === String(name).toLowerCase())
+      return found?.id || (typeof created === 'string' ? created : created?.id) || null
     } catch (err) { showToast('Failed: ' + err.message); return null }
   }
   function handleSelectJobWorker(id) {
@@ -114,8 +123,10 @@ export default function ReceiveMaterialNew() {
     try {
       const created = await upsertItemType({ name })
       showToast('Item type added')
-      await refetchItemTypes()
-      return created?.id || null
+      const fresh = await refetchItemTypes()
+      const list = Array.isArray(fresh) ? fresh : itemTypes || []
+      const found = list.find((t) => String(t?.name || '').toLowerCase() === String(name).toLowerCase())
+      return found?.id || created?.id || null
     } catch (err) { showToast('Failed: ' + err.message); return null }
   }
   function handleSelectItemType(iIdx, id) {
@@ -133,6 +144,150 @@ export default function ReceiveMaterialNew() {
       const items = [...(prev.items || [])]
       if (!items[iIdx].itemTypeId) return prev
       items[iIdx] = { ...items[iIdx], itemTypeId: '', groupId: '', partFabric: {}, sizeWise: {} }
+      return { ...prev, items }
+    })
+  }
+
+  // ── Party Combo (same layout as Job Worker): type to search, "+ Add" when
+  // no match. "+ Add" opens a small type picker first, because parties
+  // require a type (School / Retailer / Common Stock) — then the party is
+  // created and auto-selected in that row.
+  async function addNewParty(iIdx, name) {
+    setPartyType(PARTY_TYPES[0])
+    setPartyModal({ iIdx, name })
+    // Return a promise that resolves to the new id (or null on cancel).
+    // Combo awaits this, so the box stays open until the modal resolves.
+    return new Promise((resolve) => {
+      partyResolveRef.current = resolve
+    })
+  }
+
+  async function confirmAddParty() {
+    const pending = partyModal
+    const resolve = partyResolveRef.current
+    if (!pending) { resolve?.(null); return }
+    const { iIdx, name } = pending
+    try {
+      const created = await upsertParty({ name, type: partyType })
+      showToast('Party added')
+      const fresh = await refetchParties()
+      const list = Array.isArray(fresh) ? fresh : parties || []
+      const found = list.find((p) => String(p?.name || '').toLowerCase() === String(name).toLowerCase())
+      const newId = found?.id || created?.id || null
+      if (newId) handleSelectParty(iIdx, newId)
+      setPartyModal(null)
+      partyResolveRef.current = null
+      resolve?.(newId)
+    } catch (err) {
+      showToast('Failed: ' + err.message)
+      setPartyModal(null)
+      partyResolveRef.current = null
+      resolve?.(null)
+    }
+  }
+
+  function cancelAddParty() {
+    setPartyModal(null)
+    partyResolveRef.current?.(null)
+    partyResolveRef.current = null
+  }
+  function handleSelectParty(iIdx, id) {
+    setForm((prev) => {
+      const items = [...(prev.items || [])]
+      if (items[iIdx].partyId === id) return prev
+      items[iIdx] = { ...items[iIdx], partyId: id }
+      return { ...prev, items }
+    })
+  }
+  function handlePartyText(iIdx) {
+    setForm((prev) => {
+      const items = [...(prev.items || [])]
+      if (!items[iIdx].partyId) return prev
+      items[iIdx] = { ...items[iIdx], partyId: '' }
+      return { ...prev, items }
+    })
+  }
+
+  // ── Group Combo (same layout as Job Worker): scoped to the selected Job
+  // Worker + Item Type. "+ Add" creates the group under the current worker
+  // (piece rate 0, editable later in Masters) so flow never leaves the page.
+  async function addNewGroup(iIdx, name) {
+    const row = form?.items?.[iIdx]
+    const jobWorkerId = form?.jobWorkerId
+    if (!jobWorkerId) { showToast('Select job worker first'); return null }
+    if (!row?.itemTypeId) { showToast('Select item type first'); return null }
+    try {
+      const worker = (jobWorkers || []).find((j) => j.id === jobWorkerId)
+      if (!worker) { showToast('Job worker not loaded yet'); return null }
+      const groups = (worker.groups || []).map((g) => ({
+        id: g.id,
+        itemTypeId: g.item_type_id,
+        groupName: g.group_name,
+        pieceRate: g.piece_rate,
+        photo: g.photo || null,
+        sizes: (g.group_sizes || []).map((s) => ({ id: s.id, name: s.name })),
+        parts: (g.group_parts || []).map((p) => ({
+          id: p.id,
+          partName: p.part_name,
+          bom: Object.fromEntries((p.group_part_bom || []).map((b) => [b.size_id, b.cm_per_piece])),
+        })),
+      }))
+      groups.push({ id: null, itemTypeId: row.itemTypeId, groupName: name, pieceRate: 0, photo: null, sizes: [], parts: [] })
+      await upsertJobWorker({ id: worker.id, name: worker.name, phone: worker.phone || '', groups })
+      showToast('Group added')
+      const fresh = await refetchJobWorkers()
+      const updated = (Array.isArray(fresh) ? fresh : jobWorkers || []).find((j) => j.id === jobWorkerId)
+      const created = (updated?.groups || []).find(
+        (g) => g.item_type_id === row.itemTypeId && String(g.group_name || '').toLowerCase() === String(name).toLowerCase()
+      )
+      if (created) handleSelectGroup(iIdx, created.id)
+      return created?.id || null
+    } catch (err) { showToast('Failed: ' + err.message); return null }
+  }
+  function handleSelectGroup(iIdx, id) {
+    setForm((prev) => {
+      const items = [...(prev.items || [])]
+      if (items[iIdx].groupId === id) return prev
+      items[iIdx] = { ...items[iIdx], groupId: id, partFabric: {}, sizeWise: {} }
+      return { ...prev, items }
+    })
+  }
+  function handleGroupText(iIdx) {
+    setForm((prev) => {
+      const items = [...(prev.items || [])]
+      if (!items[iIdx].groupId) return prev
+      items[iIdx] = { ...items[iIdx], groupId: '', partFabric: {}, sizeWise: {} }
+      return { ...prev, items }
+    })
+  }
+
+  // ── Fabric-per-Part Combo (same layout as Job Worker): one searchable box
+  // per part with "+ Add" so a missing fabric/colour never blocks the entry.
+  async function addNewPartFabric(iIdx, partId, name) {
+    try {
+      const created = await upsertFabric({ name })
+      showToast('Fabric added')
+      const fresh = await refetchFabrics()
+      const list = Array.isArray(fresh) ? fresh : fabrics || []
+      const found = list.find((f) => String(f?.name || '').toLowerCase() === String(name).toLowerCase())
+      const newId = found?.id || created?.id || null
+      if (newId) handleSelectPartFabric(iIdx, partId, newId)
+      return newId
+    } catch (err) { showToast('Failed: ' + err.message); return null }
+  }
+  function handleSelectPartFabric(iIdx, partId, id) {
+    setForm((prev) => {
+      const items = [...(prev.items || [])]
+      items[iIdx] = { ...items[iIdx], partFabric: { ...(items[iIdx].partFabric || {}), [partId]: id } }
+      return { ...prev, items }
+    })
+  }
+  function handlePartFabricText(iIdx, partId) {
+    setForm((prev) => {
+      const items = [...(prev.items || [])]
+      const partFabric = { ...(items[iIdx].partFabric || {}) }
+      delete partFabric[partId]
+      items[iIdx] = { ...items[iIdx], partFabric }
       return { ...prev, items }
     })
   }
@@ -156,7 +311,51 @@ export default function ReceiveMaterialNew() {
           <span className="text-amber-600 ml-2">Your previously unsaved work has been recovered. Continue editing or save when ready.</span>
         </div>
       )}
-      <ReceiveMaterialForm form={form} setForm={setForm} jobWorkers={jobWorkers} itemTypes={itemTypes} parties={parties} fabrics={fabrics} onSave={handleSave} onCancel={handleCancel} onSelectJobWorker={handleSelectJobWorker} onAddNewJobWorker={addNewJobWorker} onSelectItemType={handleSelectItemType} onItemTypeText={handleItemTypeText} onAddNewItemType={addNewItemType} saving={saving} />
+      <ReceiveMaterialForm form={form} setForm={setForm} jobWorkers={jobWorkers} itemTypes={itemTypes} parties={parties} fabrics={fabrics} onSave={handleSave} onCancel={handleCancel} onSelectJobWorker={handleSelectJobWorker} onAddNewJobWorker={addNewJobWorker} onSelectItemType={handleSelectItemType} onItemTypeText={handleItemTypeText} onAddNewItemType={addNewItemType} onSelectParty={handleSelectParty} onPartyText={handlePartyText} onAddNewParty={addNewParty} onSelectGroup={handleSelectGroup} onGroupText={handleGroupText} onAddNewGroup={addNewGroup} onSelectPartFabric={handleSelectPartFabric} onPartFabricText={handlePartFabricText} onAddNewPartFabric={addNewPartFabric} saving={saving} />
+      {partyModal && (
+        <div className="modal-overlay" onClick={cancelAddParty}>
+          <div
+            style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 400, margin: '0 16px', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add new party"
+          >
+            <div style={{ padding: '16px 24px', background: '#eff6ff' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', margin: 0 }}>
+                Add new party “{partyModal.name}”
+              </h3>
+            </div>
+            <div style={{ padding: '16px 24px' }}>
+              <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Party Type</label>
+              <select
+                className="w-full px-3 py-2 border border-border-strong rounded-md text-sm"
+                value={partyType}
+                onChange={(e) => setPartyType(e.target.value)}
+                autoFocus
+              >
+                {PARTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={{ padding: '16px 24px', background: '#f9fafb', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <button
+                type="button"
+                onClick={cancelAddParty}
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 500, color: '#374151', background: '#fff', border: '1px solid #d1d5db', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmAddParty}
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: '#2563eb', border: '1px solid #2563eb', cursor: 'pointer', minWidth: 90 }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {form.id && (
         <div className="bg-panel border border-border rounded-lg p-4 mt-4">
           <button className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-red-soft text-red hover:bg-red hover:text-white transition-colors" onClick={() => handleDelete(form.id)}><FiTrash2 size={14} /> Delete This Entry</button>
