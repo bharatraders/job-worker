@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchJobWorkerById, upsertJobWorker } from '../../features/masters/jobWorkersApi'
+import { sortSizes, compareSizeNames } from '../../lib/sizes'
 import { fetchItemTypes } from '../../features/masters/api'
 import { showToast } from '../../components/ui/Toast'
 import { FiArrowLeft } from 'react-icons/fi'
@@ -23,7 +24,7 @@ function toEditing(jw) {
       groupName: g.group_name,
       pieceRate: g.piece_rate,
       photo: g.photo || null,
-      sizes: (g.group_sizes || []).map((s) => ({ id: s.id, name: s.name })),
+      sizes: sortSizes(g.group_sizes || []).map((s) => ({ id: s.id, name: s.name })),
       parts: (g.group_parts || []).map((p) => ({
         id: p.id,
         partName: p.part_name,
@@ -89,6 +90,7 @@ export default function JobWorkerEdit() {
       return
     }
     g[gi].sizes.push({ id: null, name: name.trim() })
+    g[gi].sizes.sort((a, b) => compareSizeNames(a.name, b.name))
     setEditing({ ...editing, groups: g })
   }
 
@@ -181,7 +183,7 @@ export default function JobWorkerEdit() {
           groupName: g.groupName.trim(),
           pieceRate: parseFloat(g.pieceRate) || 0,
           photo: g.photo || null,
-          sizes: g.sizes.map((s) => ({ id: s.id === null ? undefined : s.id, name: s.name.trim() })),
+          sizes: sortSizes(g.sizes).map((s) => ({ id: s.id === null ? undefined : s.id, name: s.name.trim() })),
           parts: g.parts.map((p) => ({
             id: p.id === null ? undefined : p.id,
             partName: p.partName.trim(),

@@ -14,6 +14,7 @@
  */
 
 import { supabase } from './supabaseClient'
+import { normalizeJobWorkers } from './sizes'
 
 // --- Initial state ---
 const initialState = {
@@ -105,7 +106,7 @@ export async function loadAllData() {
     dispatch({
       type: 'SET_ALL',
       payload: {
-        jobWorkers: jobWorkers.data || [],
+        jobWorkers: normalizeJobWorkers(jobWorkers.data || []),
         itemTypes: itemTypes.data || [],
         parties: parties.data || [],
         fabrics: fabrics.data || [],

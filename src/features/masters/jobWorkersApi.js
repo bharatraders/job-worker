@@ -3,6 +3,7 @@
  * Uses the upsert_job_worker RPC for atomic 5-table writes.
  */
 import { supabase } from '../../lib/supabaseClient'
+import { normalizeJobWorkers, sortSizes } from '../../lib/sizes'
 
 /**
  * Fetch all job workers with their full nested structure:
@@ -21,10 +22,13 @@ export async function fetchJobWorkers() {
     `)
     .order('name')
   if (error) throw new Error(error.message)
-  return data
+  return normalizeJobWorkers(data)
 }
 
-/** Create or update a job worker with full nested tree via RPC. */
+/** Create or update a job worker with full nested tree via RPC.
+ * Sizes are sorted into garment order BEFORE sending, and sortOrder is
+ * derived from that sorted position — so a newly added "32" after "40"
+ * automatically lands in the right slot instead of at the end. */
 export async function upsertJobWorker(worker) {
   const { data, error } = await supabase.rpc('upsert_job_worker', {
     p_id: worker.id || null,
@@ -36,7 +40,7 @@ export async function upsertJobWorker(worker) {
       groupName: group.groupName,
       pieceRate: group.pieceRate,
       photo: group.photo || null,
-      sizes: (group.sizes || []).map((size, sizeIdx) => ({
+      sizes: sortSizes(group.sizes || []).map((size, sizeIdx) => ({
         id: size.id || null,
         name: size.name,
         sortOrder: sizeIdx,
@@ -77,5 +81,5 @@ export async function fetchJobWorkerById(id) {
     .eq('id', id)
     .single()
   if (error) throw new Error(error.message)
-  return data
+  return normalizeJobWorkers(data ? [data] : [])[0] || data
 }
