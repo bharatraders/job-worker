@@ -1,18 +1,35 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApiCall, useMutation } from '../../hooks/useApiCall'
 import { fetchFabrics, upsertFabric, deleteFabric } from '../../features/masters/api'
 import { showToast } from '../../components/ui/Toast'
 import { useConfirm } from '../../components/ui/ConfirmModal'
 import { FiPlus, FiTrash2, FiEdit2, FiCheck } from 'react-icons/fi'
+import { loadDraft, saveDraftState, clearDraft } from '../../lib/drafts'
+
+const DRAFT_KEY = 'jwt_draft_masters_fabrics'
 
 export default function Fabrics() {
   const { data: items, loading, error, refetch } = useApiCall(fetchFabrics)
   const { mutate: saveItem, loading: saving } = useMutation(upsertFabric)
   const { mutate: removeItem } = useMutation(deleteFabric)
-  const [newName, setNewName] = useState('')
+  const [newName, setNewName] = useState(() => loadDraft(DRAFT_KEY)?.newName || '')
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
+  const [showDraftBanner, setShowDraftBanner] = useState(false)
   const { confirm } = useConfirm()
+
+  useEffect(() => {
+    const draft = loadDraft(DRAFT_KEY)
+    if (draft?.newName?.trim()) {
+      setNewName(draft.newName)
+      setShowDraftBanner(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    saveDraftState(DRAFT_KEY, { newName }, !!newName.trim())
+    if (!newName.trim()) setShowDraftBanner(false)
+  }, [newName])
 
   async function handleAdd() {
     const name = newName.trim().replace(/\s+/g, ' ')
@@ -23,6 +40,8 @@ export default function Fabrics() {
       await saveItem({ name })
       showToast(`Added "${name}"`)
       setNewName('')
+      clearDraft(DRAFT_KEY)
+      setShowDraftBanner(false)
       refetch()
     } catch (err) { showToast(`Failed: ${err.message}`) }
   }
@@ -77,6 +96,13 @@ export default function Fabrics() {
     <div>
       <div className="bg-panel border border-border rounded-lg p-4 mb-4">
         <h2 className="text-base font-bold mb-3">Add Fabric / Design</h2>
+        {showDraftBanner && newName.trim() && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-sm">
+            <span className="font-semibold text-amber-700">Draft restored</span>
+            <span className="text-amber-600 ml-2">Your previously unsaved work has been recovered.</span>
+            <button className="ml-3 text-xs text-amber-700 hover:underline" onClick={() => { clearDraft(DRAFT_KEY); setNewName(''); setShowDraftBanner(false) }}>Discard</button>
+          </div>
+        )}
         <div className="flex gap-3 items-end">
           <div className="flex-1">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Name</label>

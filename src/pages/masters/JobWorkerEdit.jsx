@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { fetchJobWorkerById, upsertJobWorker } from '../../features/masters/jobWorkersApi'
 import { sortSizes, compareSizeNames } from '../../lib/sizes'
 import { fetchItemTypes } from '../../features/masters/api'
+import { loadDraft, saveDraftState, clearDraft } from '../../lib/drafts'
 import { showToast } from '../../components/ui/Toast'
 import { FiArrowLeft } from 'react-icons/fi'
 
@@ -46,6 +47,8 @@ export default function JobWorkerEdit() {
   const [newGroupItemType, setNewGroupItemType] = useState('')
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupRate, setNewGroupRate] = useState('')
+  const [showDraftBanner, setShowDraftBanner] = useState(false)
+  const DRAFT_KEY = `jwt_draft_masters_jobWorker_${id}`
 
   useEffect(() => {
     let cancelled = false
@@ -56,7 +59,15 @@ export default function JobWorkerEdit() {
         const [jw, types] = await Promise.all([fetchJobWorkerById(id), fetchItemTypes()])
         if (cancelled) return
         setWorkerName(jw.name)
-        setEditing(toEditing(jw))
+        // Restore unsaved draft for this worker if present (same pattern as
+        // ReceiveMaterialNew) — draft wins over server state so work is never lost.
+        const draft = loadDraft(`jwt_draft_masters_jobWorker_${id}`)
+        if (draft?.editing) {
+          setEditing(draft.editing)
+          setShowDraftBanner(true)
+        } else {
+          setEditing(toEditing(jw))
+        }
         setItemTypes(types)
       } catch (err) {
         if (!cancelled) setLoadError(err.message || 'Failed to load job worker')
@@ -71,6 +82,13 @@ export default function JobWorkerEdit() {
   function back() {
     navigate('/masters', { state: { tab: 'jobWorkers' } })
   }
+
+  // Auto-save draft whenever the edit state changes (like ReceiveMaterialNew).
+  // Skipped until server data has loaded (editing === null).
+  useEffect(() => {
+    if (!editing) return
+    saveDraftState(DRAFT_KEY, { editing }, true)
+  }, [editing])
 
   function addGroup() {
     setEditing({ ...editing, groups: [...editing.groups, { id: null, itemTypeId: '', groupName: '', pieceRate: '', photo: null, sizes: [], parts: [] }] })
@@ -195,6 +213,7 @@ export default function JobWorkerEdit() {
       }
       await upsertJobWorker(payload)
       showToast('Saved')
+      clearDraft(DRAFT_KEY)
       navigate('/masters', { state: { tab: 'jobWorkers' } })
     } catch (err) {
       const msg = err?.message || String(err)
@@ -219,6 +238,12 @@ export default function JobWorkerEdit() {
   return (
     <div className="p-4">
       <button className="btn btn-sm flex items-center gap-1.5 mb-3" onClick={back}><FiArrowLeft size={14} /> Back to Job Workers</button>
+      {showDraftBanner && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-sm">
+          <span className="font-semibold text-amber-700">Draft restored</span>
+          <span className="text-amber-600 ml-2">Your previously unsaved changes for this worker have been recovered.</span>
+        </div>
+      )}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div className="flex-between" style={{ padding: '14px 18px', background: '#fafbfc' }}>
           <h2 style={{ margin: 0 }}>Edit Job Worker — {workerName}</h2>

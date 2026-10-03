@@ -2,7 +2,7 @@
  * Payments page — record and manage payments to job workers.
  * Simple CRUD on the payments table.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApiCall, useMutation } from '../hooks/useApiCall'
 import { fetchPayments, upsertPayment, deletePayment } from '../features/payments/api'
 import { fetchJobWorkers } from '../features/masters/jobWorkersApi'
@@ -10,6 +10,9 @@ import { showToast } from '../components/ui/Toast'
 import { useConfirm } from '../components/ui/ConfirmModal'
 import { fmtNum, fmtDate, todayStr } from '../lib/format'
 import { FiPlus, FiTrash2 } from 'react-icons/fi'
+import { loadDraft, saveDraftState, clearDraft } from '../lib/drafts'
+
+const DRAFT_KEY = 'jwt_draft_payments'
 export default function Payments() {
   const { data: payments, loading, error, refetch } = useApiCall(fetchPayments, [], 'payments')
   const { data: jobWorkers } = useApiCall(fetchJobWorkers, [], 'jobWorkers')
@@ -18,7 +21,22 @@ export default function Payments() {
   const { mutate: removePayment } = useMutation(deletePayment)
   const { confirm } = useConfirm()
 
-  const [form, setForm] = useState({ jobWorkerId: '', amount: '', date: todayStr(), notes: '' })
+  const [form, setForm] = useState(() => loadDraft(DRAFT_KEY) || { jobWorkerId: '', amount: '', date: todayStr(), notes: '' })
+  const [showDraftBanner, setShowDraftBanner] = useState(false)
+
+  useEffect(() => {
+    const draft = loadDraft(DRAFT_KEY)
+    if (draft && (draft.jobWorkerId || draft.amount || draft.notes)) {
+      setForm((prev) => ({ ...prev, ...draft }))
+      setShowDraftBanner(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    const hasData = !!(form.jobWorkerId || form.amount || form.notes)
+    saveDraftState(DRAFT_KEY, form, hasData)
+    if (!hasData) setShowDraftBanner(false)
+  }, [form])
 
   function jwName(id) { return jobWorkers?.find((j) => j.id === id)?.name || '—' }
 
@@ -30,6 +48,8 @@ export default function Payments() {
       await savePayment({ jobWorkerId: form.jobWorkerId, amount: Number(form.amount), date: form.date, notes: form.notes })
       showToast(`Payment of ₹${fmtNum(form.amount)} recorded`)
       setForm({ jobWorkerId: '', amount: '', date: todayStr(), notes: '' })
+      clearDraft(DRAFT_KEY)
+      setShowDraftBanner(false)
       refetch()
     } catch (err) { showToast(`Failed: ${err.message}`) }
   }
@@ -47,6 +67,12 @@ export default function Payments() {
     <div>
       <div className="bg-panel border border-border rounded-lg p-4 mb-4">
         <h2 className="text-base font-bold mb-3">Record Payment</h2>
+        {showDraftBanner && (form.jobWorkerId || form.amount || form.notes) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-sm">
+            <span className="font-semibold text-amber-700">Draft restored</span>
+            <span className="text-amber-600 ml-2">Your previously unsaved work has been recovered.</span>
+          </div>
+        )}
         <form onSubmit={handleAdd}>
           <div className="flex gap-3 items-end flex-wrap">
             <div className="w-48">

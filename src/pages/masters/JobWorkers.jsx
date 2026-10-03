@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApiCall, useMutation } from '../../hooks/useApiCall'
 import { fetchJobWorkers, upsertJobWorker, deleteJobWorker } from '../../features/masters/jobWorkersApi'
@@ -7,6 +7,9 @@ import { showToast } from '../../components/ui/Toast'
 import { useConfirm } from '../../components/ui/ConfirmModal'
 import { FiDownload } from 'react-icons/fi'
 import { exportJobWorkersCSV } from '../../lib/export'
+import { loadDraft, saveDraftState, clearDraft } from '../../lib/drafts'
+
+const DRAFT_KEY = 'jwt_draft_masters_jobWorkers'
 
 export default function JobWorkers() {
   const { data: workers, loading, error, refetch } = useApiCall(fetchJobWorkers)
@@ -16,9 +19,24 @@ export default function JobWorkers() {
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState({})
   const [expandedGroups, setExpandedGroups] = useState({})
-  const [newName, setNewName] = useState('')
-  const [newPhone, setNewPhone] = useState('')
+  const [newName, setNewName] = useState(() => loadDraft(DRAFT_KEY)?.newName || '')
+  const [newPhone, setNewPhone] = useState(() => loadDraft(DRAFT_KEY)?.newPhone || '')
+  const [showDraftBanner, setShowDraftBanner] = useState(false)
   const { confirm } = useConfirm()
+
+  useEffect(() => {
+    const draft = loadDraft(DRAFT_KEY)
+    if (draft && (draft.newName?.trim() || draft.newPhone?.trim())) {
+      setNewName(draft.newName || '')
+      setNewPhone(draft.newPhone || '')
+      setShowDraftBanner(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    saveDraftState(DRAFT_KEY, { newName, newPhone }, !!(newName.trim() || newPhone.trim()))
+    if (!newName.trim() && !newPhone.trim()) setShowDraftBanner(false)
+  }, [newName, newPhone])
 
   function toggle(id) { setExpanded({...expanded, [id]: !expanded[id]}) }
   function toggleGroup(id) { setExpandedGroups({...expandedGroups, [id]: !expandedGroups[id]}) }
@@ -47,6 +65,8 @@ export default function JobWorkers() {
       refetch()
       setNewName('')
       setNewPhone('')
+      clearDraft(DRAFT_KEY)
+      setShowDraftBanner(false)
       showToast('Added "' + newName.trim() + '"')
     })
   }
@@ -72,6 +92,13 @@ export default function JobWorkers() {
             {/* Add Job Worker Form */}
       <div className="card mb-4">
         <h2 style={{ marginBottom: 12 }}>Add Job Worker</h2>
+        {showDraftBanner && (newName.trim() || newPhone.trim()) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-sm">
+            <span className="font-semibold text-amber-700">Draft restored</span>
+            <span className="text-amber-600 ml-2">Your previously unsaved work has been recovered.</span>
+            <button className="ml-3 text-xs text-amber-700 hover:underline" onClick={() => { clearDraft(DRAFT_KEY); setNewName(''); setNewPhone(''); setShowDraftBanner(false) }}>Discard</button>
+          </div>
+        )}
         <div className="row">
           <div className="field"><label>Name</label><input id="jwName" placeholder="Job worker name" value={newName} onChange={(e) => setNewName(e.target.value)} /></div>
           <div className="field"><label>Phone (optional)</label><input id="jwPhone" placeholder="10-digit number" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} /></div>
