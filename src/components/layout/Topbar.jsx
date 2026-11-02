@@ -13,6 +13,7 @@ const TITLES = {
   '/receive-material': 'Receive Material',
   '/live-stock': 'Live Stock',
   '/fabric-ledger': 'Fabric Ledger',
+  '/job-worker-ledger': 'Job Worker Ledger',
   '/orders-list': 'Orders List',
   '/group-wise': 'Group-wise Data',
   '/history': 'History',

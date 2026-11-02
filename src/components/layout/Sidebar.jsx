@@ -25,6 +25,7 @@ const NAV_ITEMS = [
   { to: '/receive-material', label: 'Receive Material', icon: FiDownload },
   { to: '/live-stock', label: 'Live Stock', icon: FiPackage },
   { to: '/fabric-ledger', label: 'Fabric Ledger', icon: FiBookOpen },
+  { to: '/job-worker-ledger', label: 'Job Worker Ledger', icon: FiUsers },
   { to: '/group-wise', label: 'Group-wise Data', icon: FiGrid },
   { to: '/history', label: 'History', icon: FiClock },
   { to: '/billing', label: 'Billing', icon: FiLock },

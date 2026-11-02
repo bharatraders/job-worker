@@ -24,6 +24,7 @@ import History from './pages/History'
 import LiveStock from './pages/LiveStock'
 import Billing from './pages/Billing'
 import FabricLedger from './pages/FabricLedger'
+import JobWorkerLedger from './pages/JobWorkerLedger'
 import GroupWiseData from './pages/GroupWiseData'
 
 export default function App() {
@@ -74,6 +75,7 @@ export default function App() {
             <Route path="/history" element={<History />} />
             <Route path="/live-stock" element={<LiveStock />} />
             <Route path="/fabric-ledger" element={<FabricLedger />} />
+            <Route path="/job-worker-ledger" element={<JobWorkerLedger />} />
             <Route path="/group-wise" element={<GroupWiseData />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="*" element={<Navigate to="/" replace />} />

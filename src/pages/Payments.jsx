@@ -2,7 +2,7 @@
  * Payments page — record and manage payments to job workers.
  * Simple CRUD on the payments table.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useApiCall, useMutation } from '../hooks/useApiCall'
 import { fetchPayments, upsertPayment, deletePayment } from '../features/payments/api'
 import { fetchJobWorkers } from '../features/masters/jobWorkersApi'
@@ -22,6 +22,7 @@ export default function Payments() {
   const { confirm } = useConfirm()
 
   const [form, setForm] = useState(() => loadDraft(DRAFT_KEY) || { jobWorkerId: '', amount: '', date: todayStr(), notes: '' })
+  const [selectedJobWorkerId, setSelectedJobWorkerId] = useState('')
   const [showDraftBanner, setShowDraftBanner] = useState(false)
 
   useEffect(() => {
@@ -37,6 +38,12 @@ export default function Payments() {
     saveDraftState(DRAFT_KEY, form, hasData)
     if (!hasData) setShowDraftBanner(false)
   }, [form])
+
+  const filteredPayments = useMemo(() => {
+    if (!payments) return []
+    if (!selectedJobWorkerId) return payments
+    return payments.filter((payment) => payment.job_worker_id === selectedJobWorkerId)
+  }, [payments, selectedJobWorkerId])
 
   function jwName(id) { return jobWorkers?.find((j) => j.id === id)?.name || '—' }
 
@@ -100,9 +107,24 @@ export default function Payments() {
       </div>
 
       <div className="bg-panel border border-border rounded-lg p-4">
-        <h2 className="text-base font-bold mb-3">Payment History ({payments?.length || 0})</h2>
-        {!payments?.length ? (
-          <div className="empty-state"><div className="msg">No payments recorded yet.</div></div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-3">
+          <h2 className="text-base font-bold">Payment History ({filteredPayments.length})</h2>
+          <div className="w-full max-w-[220px]">
+            <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Job Worker</label>
+            <select
+              className="w-full px-3 py-2 border border-border-strong rounded-md text-sm"
+              value={selectedJobWorkerId}
+              onChange={(e) => setSelectedJobWorkerId(e.target.value)}
+            >
+              <option value="">All job workers</option>
+              {jobWorkers?.map((jw) => (
+                <option key={jw.id} value={jw.id}>{jw.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {!filteredPayments.length ? (
+          <div className="empty-state"><div className="msg">{selectedJobWorkerId ? 'No payments found for this job worker.' : 'No payments recorded yet.'}</div></div>
         ) : (
           <div className="table-scroll">
             <table className="w-full border-collapse text-[13.5px]">
@@ -116,7 +138,7 @@ export default function Payments() {
                 </tr>
               </thead>
               <tbody>
-                {payments.map((p) => (
+                {filteredPayments.map((p) => (
                   <tr key={p.id} className="border-b border-[#ecedf1] hover:bg-[#fafbfc]">
                     <td className="p-2.5">{fmtDate(p.date)}</td>
                     <td className="p-2.5">{jwName(p.job_worker_id)}</td>

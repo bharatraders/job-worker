@@ -2,6 +2,7 @@
 import { useApiCall } from '../hooks/useApiCall'
 import { fetchGroupBilling } from '../features/views/api'
 import { fetchJobWorkers } from '../features/masters/jobWorkersApi'
+import { fetchItemTypes } from '../features/masters/api'
 import { fmtNum } from '../lib/format'
 import { FiLock } from 'react-icons/fi'
 
@@ -20,11 +21,13 @@ export default function Billing() {
   const [checking, setChecking] = useState(false)
   // Minimal display-only filters (no change to data source / views).
   const [fJobWorkerId, setFJobWorkerId] = useState('')
+  const [fItemTypeId, setFItemTypeId] = useState('')
   const [fGroupId, setFGroupId] = useState('')
 
   // Original data source — untouched.
   const { data: billing, loading, error } = useApiCall(fetchGroupBilling, [unlocked])
   const { data: jobWorkers } = useApiCall(fetchJobWorkers)
+  const { data: itemTypes } = useApiCall(fetchItemTypes)
 
   // Persist unlock for this tab session only (cleared on tab close).
   useEffect(() => {
@@ -64,23 +67,76 @@ export default function Billing() {
   }
 
   function jwName(id) { return jobWorkers?.find((j) => j.id === id)?.name || '—' }
-
-  // Minimal display-only filters over the original view rows. Group names
-  // resolve from the already-fetched jobWorkers tree; rows whose group was
-  // deleted from masters show '—' but are NOT hidden (full data preserved).
-  const filtered = (billing || []).filter((r) =>
-    (!fJobWorkerId || r.job_worker_id === fJobWorkerId) &&
-    (!fGroupId || r.group_id === fGroupId)
-  )
-  const groupOptions = []
-  ;(jobWorkers || []).forEach((jw) => {
-    if (fJobWorkerId && fJobWorkerId !== jw.id) return
-    ;(jw.groups || []).forEach((g) => groupOptions.push({ id: g.id, name: jw.name + ' — ' + g.group_name }))
-  })
-  function groupLabel(jwId, groupId) {
-    const g = jobWorkers?.find((j) => j.id === jwId)?.groups?.find((x) => x.id === groupId)
-    return g ? g.group_name : '—'
+  function itemName(id) { return itemTypes?.find((x) => x.id === id)?.name || '—' }
+  function groupInfo(jwId, groupId) {
+    const jw = jobWorkers?.find((j) => j.id === jwId)
+    const group = jw?.groups?.find((g) => g.id === groupId)
+    return {
+      itemTypeId: group?.item_type_id || '',
+      itemTypeName: itemName(group?.item_type_id || ''),
+      groupName: group?.group_name || '—',
+    }
   }
+
+  const itemTypeOptions = []
+  ;(billing || []).forEach((row) => {
+    const { itemTypeId, itemTypeName } = groupInfo(row.job_worker_id, row.group_id)
+    if (!itemTypeId || !itemTypeName || itemTypeName === '—') return
+    if (fJobWorkerId && fJobWorkerId !== row.job_worker_id) return
+    if (!itemTypeOptions.some((option) => option.id === itemTypeId)) {
+      itemTypeOptions.push({ id: itemTypeId, name: itemTypeName })
+    }
+  })
+
+  const groupOptions = []
+  ;(billing || []).forEach((row) => {
+    const { itemTypeId, itemTypeName, groupName } = groupInfo(row.job_worker_id, row.group_id)
+    if (!itemTypeId || !groupName || groupName === '—') return
+    if (fJobWorkerId && fJobWorkerId !== row.job_worker_id) return
+    if (fItemTypeId && fItemTypeId !== itemTypeId) return
+    const key = `${row.job_worker_id}|${row.group_id}`
+    if (!groupOptions.some((option) => option.key === key)) {
+      groupOptions.push({
+        key,
+        id: row.group_id,
+        name: `${jwName(row.job_worker_id)} — ${itemTypeName} — ${groupName}`,
+      })
+    }
+  })
+
+  const filteredBillingRows = (billing || []).filter((row) => {
+    const { itemTypeId } = groupInfo(row.job_worker_id, row.group_id)
+    if (fJobWorkerId && row.job_worker_id !== fJobWorkerId) return false
+    if (fItemTypeId && itemTypeId !== fItemTypeId) return false
+    if (fGroupId && row.group_id !== fGroupId) return false
+    return true
+  })
+
+  // Payments are recorded against the job worker, not a specific group.
+  // Aggregate the matching raw group rows to a jobworker-level billing summary so the
+  // paid and balance figures are consistent with the actual accounting model.
+  const workerRows = filteredBillingRows.reduce((acc, row) => {
+    const key = row.job_worker_id
+    if (!acc[key]) {
+      acc[key] = {
+        job_worker_id: key,
+        total_pieces: 0,
+        amount_owed: 0,
+        total_paid: Number(row.total_paid || 0),
+      }
+    }
+    acc[key].total_pieces += Number(row.total_pieces || 0)
+    acc[key].amount_owed += Number(row.amount_owed || 0)
+    acc[key].total_paid = Number(acc[key].total_paid || 0)
+    return acc
+  }, {})
+
+  const workerBilling = Object.values(workerRows).map((row) => ({
+    ...row,
+    balance_due: Number(row.amount_owed || 0) - Number(row.total_paid || 0),
+  })).sort((a, b) => (jwName(a.job_worker_id) || '').localeCompare(jwName(b.job_worker_id) || ''))
+
+  const filtered = workerBilling
 
   if (!unlocked) {
     return (
@@ -132,23 +188,30 @@ export default function Billing() {
         <div className="flex gap-3 mt-3 flex-wrap items-end">
           <div className="w-48">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Job Worker</label>
-            <select className={F} value={fJobWorkerId} onChange={(e) => { setFJobWorkerId(e.target.value); setFGroupId('') }}>
+            <select className={F} value={fJobWorkerId} onChange={(e) => { setFJobWorkerId(e.target.value); setFItemTypeId(''); setFGroupId('') }}>
               <option value="">All job workers</option>
               {jobWorkers?.map((jw) => <option key={jw.id} value={jw.id}>{jw.name}</option>)}
             </select>
           </div>
-          <div className="w-56">
+          <div className="w-52">
+            <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Item Type</label>
+            <select className={F} value={fItemTypeId} onChange={(e) => { setFItemTypeId(e.target.value); setFGroupId('') }}>
+              <option value="">All item types</option>
+              {itemTypeOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+            </select>
+          </div>
+          <div className="w-64">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Group</label>
             <select className={F} value={fGroupId} onChange={(e) => setFGroupId(e.target.value)}>
               <option value="">All groups</option>
-              {groupOptions.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              {groupOptions.map((option) => <option key={option.key} value={option.id}>{option.name}</option>)}
             </select>
           </div>
-          <button className="btn" onClick={() => { setFJobWorkerId(''); setFGroupId('') }}>Clear filters</button>
+          <button className="btn" onClick={() => { setFJobWorkerId(''); setFItemTypeId(''); setFGroupId('') }}>Clear filters</button>
         </div>
       </div>
       <div className="bg-panel border border-border rounded-lg p-4">
-        <h2 className="text-base font-bold mb-3">Group-wise Billing <span className="text-xs font-normal text-text-soft">({filtered?.length || 0})</span></h2>
+        <h2 className="text-base font-bold mb-3">Job Worker Billing <span className="text-xs font-normal text-text-soft">({filtered?.length || 0})</span></h2>
         {!filtered?.length ? (
           <div className="empty-state"><div className="msg">No billing data matches these filters.</div></div>
         ) : (
@@ -157,21 +220,17 @@ export default function Billing() {
               <thead>
                 <tr className="text-left text-text-soft text-xs uppercase font-bold bg-[#f7f8fa] border-b border-border">
                   <th className="p-2.5">Job Worker</th>
-                  <th className="p-2.5">Group</th>
                   <th className="p-2.5 text-right">Pieces</th>
-                  <th className="p-2.5 text-right">Rate</th>
-                  <th className="p-2.5 text-right">Amount</th>
+                  <th className="p-2.5 text-right">Billed Amount</th>
                   <th className="p-2.5 text-right">Paid</th>
-                  <th className="p-2.5 text-right">Due</th>
+                  <th className="p-2.5 text-right">Balance Due</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((r, i) => (
                   <tr key={i} className="border-b border-[#ecedf1] hover:bg-[#fafbfc]">
                     <td className="p-2.5">{jwName(r.job_worker_id)}</td>
-                    <td className="p-2.5">{groupLabel(r.job_worker_id, r.group_id)}</td>
                     <td className="p-2.5 text-right font-mono">{fmtNum(r.total_pieces, 0)}</td>
-                    <td className="p-2.5 text-right font-mono">{fmtNum(r.piece_rate)}</td>
                     <td className="p-2.5 text-right font-mono">{fmtNum(r.amount_owed)}</td>
                     <td className="p-2.5 text-right font-mono text-green">{fmtNum(r.total_paid)}</td>
                     <td className={'p-2.5 text-right font-mono font-bold ' + (r.balance_due > 0 ? 'text-red' : 'text-green')}>{fmtNum(r.balance_due)}</td>
