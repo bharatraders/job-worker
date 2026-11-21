@@ -4,6 +4,7 @@ import { fetchReceiveMaterial } from '../features/receiveMaterial/api'
 import { fetchJobWorkers } from '../features/masters/jobWorkersApi'
 import { fetchItemTypes } from '../features/masters/api'
 import { fmtNum } from '../lib/format'
+import SearchSelect from '../components/ui/SearchSelect'
 
 const FILTERS_KEY = 'jwt_filters_groupWise'
 
@@ -101,24 +102,15 @@ function FilterBar({ filt, set, jobWorkers, itemTypes, groupOptions, F }) {
       </div>
       <div className="w-48">
         <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Job Worker</label>
-        <select className={F} value={filt.jobWorkerId} onChange={(e) => set('jobWorkerId', e.target.value)}>
-          <option value="">All job workers</option>
-          {jobWorkers?.map((jw) => <option key={jw.id} value={jw.id}>{jw.name}</option>)}
-        </select>
+        <SearchSelect className={F} list={jobWorkers?.map((jw) => ({ id: jw.id, name: jw.name })) || []} value={filt.jobWorkerId} placeholder="All job workers" onSelect={(id) => set('jobWorkerId', id || '')} />
       </div>
       <div className="w-48">
         <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Item Type</label>
-        <select className={F} value={filt.itemTypeId} onChange={(e) => set('itemTypeId', e.target.value)}>
-          <option value="">All item types</option>
-          {itemTypes?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        <SearchSelect className={F} list={itemTypes?.map((t) => ({ id: t.id, name: t.name })) || []} value={filt.itemTypeId} placeholder="All item types" onSelect={(id) => set('itemTypeId', id || '')} />
       </div>
       <div className="w-56">
         <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Group</label>
-        <select className={F} value={filt.groupId} onChange={(e) => set('groupId', e.target.value)}>
-          <option value="">All groups</option>
-          {groupOptions.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
+        <SearchSelect className={F} list={groupOptions} value={filt.groupId} placeholder="All groups" onSelect={(id) => set('groupId', id || '')} />
       </div>
       <button className="btn" onClick={() => setFilt({ date_from: '', date_to: '', jobWorkerId: '', itemTypeId: '', groupId: '' })}>Clear filters</button>
     </div>

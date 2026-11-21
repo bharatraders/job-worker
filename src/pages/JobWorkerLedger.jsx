@@ -6,6 +6,7 @@ import { fetchPayments } from '../features/payments/api'
 import { fetchJobWorkers } from '../features/masters/jobWorkersApi'
 import { fetchFabrics } from '../features/masters/api'
 import { fmtNum, fmtDate } from '../lib/format'
+import SearchSelect from '../components/ui/SearchSelect'
 
 export default function JobWorkerLedger() {
   const { data: issues, loading: loadingIssues, error: issueError } = useApiCall(fetchIssueFabric)
@@ -103,10 +104,13 @@ export default function JobWorkerLedger() {
         </h2>
         <div className="mt-3 w-full max-w-[260px]">
           <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Job Worker</label>
-          <select className="w-full px-3 py-2 border border-border-strong rounded-md text-sm" value={jwId} onChange={(e) => setJwId(e.target.value)}>
-            <option value="">Select job worker...</option>
-            {jobWorkers?.map((jw) => <option key={jw.id} value={jw.id}>{jw.name}</option>)}
-          </select>
+          <SearchSelect
+            className="w-full px-3 py-2 border border-border-strong rounded-md text-sm"
+            list={jobWorkers?.map((jw) => ({ id: jw.id, name: jw.name })) || []}
+            value={jwId}
+            placeholder="Select job worker..."
+            onSelect={(id) => setJwId(id || '')}
+          />
         </div>
       </div>
 

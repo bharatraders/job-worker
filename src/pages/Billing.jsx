@@ -5,6 +5,7 @@ import { fetchJobWorkers } from '../features/masters/jobWorkersApi'
 import { fetchItemTypes } from '../features/masters/api'
 import { fmtNum } from '../lib/format'
 import { FiLock } from 'react-icons/fi'
+import SearchSelect from '../components/ui/SearchSelect'
 
 const FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -188,24 +189,15 @@ export default function Billing() {
         <div className="flex gap-3 mt-3 flex-wrap items-end">
           <div className="w-48">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Job Worker</label>
-            <select className={F} value={fJobWorkerId} onChange={(e) => { setFJobWorkerId(e.target.value); setFItemTypeId(''); setFGroupId('') }}>
-              <option value="">All job workers</option>
-              {jobWorkers?.map((jw) => <option key={jw.id} value={jw.id}>{jw.name}</option>)}
-            </select>
+            <SearchSelect className={F} list={jobWorkers?.map((jw) => ({ id: jw.id, name: jw.name })) || []} value={fJobWorkerId} placeholder="All job workers" onSelect={(id) => { setFJobWorkerId(id || ''); setFItemTypeId(''); setFGroupId('') }} />
           </div>
           <div className="w-52">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Item Type</label>
-            <select className={F} value={fItemTypeId} onChange={(e) => { setFItemTypeId(e.target.value); setFGroupId('') }}>
-              <option value="">All item types</option>
-              {itemTypeOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-            </select>
+            <SearchSelect className={F} list={itemTypeOptions} value={fItemTypeId} placeholder="All item types" onSelect={(id) => { setFItemTypeId(id || ''); setFGroupId('') }} />
           </div>
           <div className="w-64">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Group</label>
-            <select className={F} value={fGroupId} onChange={(e) => setFGroupId(e.target.value)}>
-              <option value="">All groups</option>
-              {groupOptions.map((option) => <option key={option.key} value={option.id}>{option.name}</option>)}
-            </select>
+            <SearchSelect className={F} list={groupOptions} value={fGroupId} placeholder="All groups" onSelect={(id) => setFGroupId(id || '')} />
           </div>
           <button className="btn" onClick={() => { setFJobWorkerId(''); setFItemTypeId(''); setFGroupId('') }}>Clear filters</button>
         </div>

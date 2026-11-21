@@ -12,6 +12,7 @@ import { fetchReceiveMaterial } from '../features/receiveMaterial/api'
 import { fetchJobWorkers } from '../features/masters/jobWorkersApi'
 import { fetchFabrics } from '../features/masters/api'
 import { fmtNum, fmtDate } from '../lib/format'
+import SearchSelect from '../components/ui/SearchSelect'
 
 export default function FabricLedger() {
   const { data: issues, loading: l1, error: e1 } = useApiCall(fetchIssueFabric)
@@ -77,17 +78,11 @@ export default function FabricLedger() {
         <div className="flex gap-3 mt-3 flex-wrap">
           <div className="w-56">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Job Worker</label>
-            <select className={F} value={jwId} onChange={(e) => setJwId(e.target.value)}>
-              <option value="">Select job worker...</option>
-              {jobWorkers?.map((jw) => <option key={jw.id} value={jw.id}>{jw.name}</option>)}
-            </select>
+            <SearchSelect className={F} list={jobWorkers?.map((jw) => ({ id: jw.id, name: jw.name })) || []} value={jwId} placeholder="Select job worker..." onSelect={(id) => setJwId(id || '')} />
           </div>
           <div className="w-56">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Fabric</label>
-            <select className={F} value={fabId} onChange={(e) => setFabId(e.target.value)}>
-              <option value="">Select fabric...</option>
-              {fabrics?.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
+            <SearchSelect className={F} list={fabrics?.map((f) => ({ id: f.id, name: f.name })) || []} value={fabId} placeholder="Select fabric..." onSelect={(id) => setFabId(id || '')} />
           </div>
         </div>
       </div>

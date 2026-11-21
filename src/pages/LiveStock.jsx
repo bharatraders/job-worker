@@ -10,6 +10,7 @@ import { fetchJobWorkers } from '../features/masters/jobWorkersApi'
 import { fetchFabrics, fetchItemTypes, fetchParties } from '../features/masters/api'
 import { fmtNum } from '../lib/format'
 import { FiFilter } from 'react-icons/fi'
+import SearchSelect from '../components/ui/SearchSelect'
 
 const FILTERS_KEY = 'jwt_filters_liveStock'
 
@@ -71,17 +72,23 @@ export default function LiveStock() {
         <div className="flex gap-3 mb-4 flex-wrap">
           <div className="w-48">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Job Worker</label>
-            <select className="w-full px-3 py-2 border border-border-strong rounded-md text-sm" value={filterJw} onChange={(e) => setFilterJw(e.target.value)}>
-              <option value="">All job workers</option>
-              {jobWorkers?.map((jw) => <option key={jw.id} value={jw.id}>{jw.name}</option>)}
-            </select>
+            <SearchSelect
+              list={jobWorkers?.map((jw) => ({ id: jw.id, name: jw.name })) || []}
+              value={filterJw}
+              placeholder="All job workers"
+              onSelect={(id) => setFilterJw(id || '')}
+              className="w-full px-3 py-2 border border-border-strong rounded-md text-sm"
+            />
           </div>
           <div className="w-48">
             <label className="block text-[11px] font-bold text-text-soft mb-1 uppercase">Fabric</label>
-            <select className="w-full px-3 py-2 border border-border-strong rounded-md text-sm" value={filterFab} onChange={(e) => setFilterFab(e.target.value)}>
-              <option value="">All fabrics</option>
-              {fabrics?.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
+            <SearchSelect
+              list={fabrics?.map((f) => ({ id: f.id, name: f.name })) || []}
+              value={filterFab}
+              placeholder="All fabrics"
+              onSelect={(id) => setFilterFab(id || '')}
+              className="w-full px-3 py-2 border border-border-strong rounded-md text-sm"
+            />
           </div>
           <button className="btn btn-sm self-end" onClick={() => { setFilterJw(''); setFilterFab('') }}>Clear filters</button>
         </div>
